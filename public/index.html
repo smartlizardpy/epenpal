@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PenPal Desk — Letter & Postcard</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script type="module" src="https://unpkg.com/vue@3/dist/vue.esm-browser.js"></script>
+  <style>
+    :root {
+      --orange: #FF7A3D;
+      --paper: #FFF9F3;
+      --bg: #EFE9E4;
+      --ink: #2B2B2B;
+      --muted: #7A716C;
+      --border: #E7D7C8;
+    }
+
+    * { box-sizing: border-box; }
+
+    [v-cloak] { display: none; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: var(--ink);
+    }
+
+    .center {
+      max-width: 880px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+
+    /* Auth row */
+    .auth-row {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .auth-pill {
+      background: #E6D9D1;
+      color: #5C524E;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      font-size: 14px;
+    }
+    .auth-btn {
+      padding: 10px 16px;
+      border: 1px solid var(--orange);
+      background: white;
+      color: var(--orange);
+      border-radius: 10px;
+      font-size: 14px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    /* Mode Switcher */
+    .switcher {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .switch-btn {
+      padding: 10px 22px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      margin: 0 6px;
+      cursor: pointer;
+      font-weight: 600;
+      background: #E6D9D1;
+      color: #5C524E;
+    }
+
+    .switch-btn.active {
+      background: var(--orange);
+      color: white;
+    }
+
+    /* Shared paper styling */
+    .paper {
+      background: var(--paper);
+      padding: 32px 40px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0px 3px 14px rgba(0,0,0,0.05);
+      display: none;
+    }
+
+    .paper.show { display: block; }
+
+    .header {
+      text-align: center;
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--orange);
+      margin-bottom: 26px;
+    }
+
+    .label {
+      display: block;
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    input, textarea {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 16px;
+      outline: none;
+      background: white;
+    }
+
+    textarea {
+      resize: vertical;
+      line-height: 1.6;
+      min-height: 180px;
+    }
+
+    .send-btn {
+      margin-top: 26px;
+      background: var(--orange);
+      color: white;
+      padding: 14px 32px;
+      border-radius: 12px;
+      border: none;
+      font-size: 17px;
+      font-weight: 600;
+      cursor: pointer;
+      float: right;
+    }
+    .send-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* Postcard photo block */
+    .photo-block {
+      width: 100%;
+      height: 260px;
+      border-radius: 10px;
+      border: 2px solid var(--border);
+      overflow: hidden;
+      background: #ddd;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .photo-block img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .upload-label {
+      background: var(--orange);
+      color: white;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      display: inline-block;
+      margin-bottom: 16px;
+      font-weight: 600;
+    }
+
+    #uploadInput { display: none; }
+
+    .status {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 14px;
+      min-height: 18px;
+      float: left;
+      padding-top: 10px;
+    }
+    .status.error { color: #c0392b; }
+    .hint { color: var(--muted); font-size: 13px; margin-top: 12px; }
+
+    @media (max-width: 640px) {
+      .send-btn, .status { float: none; width: 100%; text-align: right; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="app" class="center" v-cloak>
+
+  <div class="auth-row">
+    <div class="auth-pill">{{ authLabel }}</div>
+    <button class="auth-btn" type="button" @click="authorize">Authorize Gmail</button>
+  </div>
+
+  <!-- Mode Switcher -->
+  <div class="switcher">
+    <button class="switch-btn" :class="{active: mode === 'letter'}" @click="mode='letter'">✉️ Letter</button>
+    <button class="switch-btn" :class="{active: mode === 'postcard'}" @click="mode='postcard'">📮 Postcard</button>
+  </div>
+
+  <!-- LETTER MODE -->
+  <div id="letterMode" class="paper" :class="{show: mode === 'letter'}">
+    <div class="header">Write a Letter</div>
+
+    <label class="label" for="letterTo">To (email)</label>
+    <input id="letterTo" type="email" placeholder="your.friend@example.com" v-model="letter.to" required>
+
+    <label class="label" style="margin-top:22px;" for="letterSubject">Letter Title</label>
+    <input id="letterSubject" type="text" placeholder="Today’s Letter…" v-model="letter.subject" required>
+
+    <label class="label" style="margin-top:22px;" for="letterMessage">Message</label>
+    <textarea id="letterMessage" placeholder="Write your letter here…" v-model="letter.message" required></textarea>
+
+    <div class="hint">Sent from your authorized Gmail account with the PenPal paper look.</div>
+    <div class="status" :class="{error: statusLetter.isError}">{{ statusLetter.text }}</div>
+    <button class="send-btn" type="button" :disabled="!accessToken || sending" @click="handleSend('letter')">
+      {{ sending && mode === 'letter' ? 'Sending…' : 'Send Letter ✉️' }}
+    </button>
+    <div style="clear: both;"></div>
+  </div>
+
+  <!-- POSTCARD MODE -->
+  <div id="postcardMode" class="paper" :class="{show: mode === 'postcard'}">
+
+    <div class="header">Write a Postcard</div>
+
+    <label class="label" for="postcardTo">To (email)</label>
+    <input id="postcardTo" type="email" placeholder="postcard.pal@example.com" v-model="postcard.to" required>
+
+    <label class="label" style="margin-top:16px;" for="postcardSubject">Subject</label>
+    <input id="postcardSubject" type="text" placeholder="A postcard from the road" v-model="postcard.subject" required>
+
+    <!-- Upload button -->
+    <label class="upload-label" for="uploadInput">Upload Photo 📷</label>
+    <input type="file" id="uploadInput" accept="image/*" @change="onUpload">
+
+    <!-- Photo preview -->
+    <div class="photo-block">
+      <img v-if="postcard.image" :src="postcard.image">
+      <span v-else style="color:#555;">No photo selected</span>
+    </div>
+
+    <!-- Message -->
+    <label class="label" for="postcardMessage">Message</label>
+    <textarea id="postcardMessage" placeholder="Your postcard message…" v-model="postcard.message" required></textarea>
+
+    <div class="hint">Add a photo and message—everything stays on this page.</div>
+    <div class="status" :class="{error: statusPostcard.isError}">{{ statusPostcard.text }}</div>
+    <button class="send-btn" type="button" :disabled="!accessToken || sending" @click="handleSend('postcard')">
+      {{ sending && mode === 'postcard' ? 'Sending…' : 'Send Postcard 📮' }}
+    </button>
+    <div style="clear: both;"></div>
+  </div>
+
+</div>
+
+<script type="module">
+  import { createApp } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
+
+  const GOOGLE_CLIENT_ID = '686447695619-c4e4cffgkav62dsgtblg0tvuat9bj69u.apps.googleusercontent.com';
+  const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
+
+  const palette = {
+    orange: '#FF7A3D',
+    paper: '#FFF9F3',
+    bg: '#EFE9E4',
+    ink: '#2B2B2B',
+    muted: '#7A716C',
+    border: '#E7D7C8',
+  };
+
+  createApp({
+    data() {
+      return {
+        mode: 'letter',
+        accessToken: null,
+        tokenClient: null,
+        sending: false,
+        letter: { to: '', subject: '', message: '' },
+        postcard: { to: '', subject: '', message: '', image: '' },
+        statusLetter: { text: '', isError: false },
+        statusPostcard: { text: '', isError: false },
+      };
+    },
+    computed: {
+      authLabel() {
+        return this.accessToken ? 'Authorized for Gmail send' : 'Not authorized';
+      },
+    },
+    methods: {
+      onUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          this.postcard.image = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      },
+      escapeHtml(value) {
+        return String(value || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      },
+      base64Encode(str) {
+        const bytes = new TextEncoder().encode(str);
+        let binary = '';
+        for (const b of bytes) binary += String.fromCharCode(b);
+        return btoa(binary);
+      },
+      base64UrlEncode(str) {
+        return this.base64Encode(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      },
+      buildLetterHtml({ to, subject, message }) {
+        const safeMessage = this.escapeHtml(message).replace(/\n/g, '<br>');
+        const safeSubject = this.escapeHtml(subject);
+        const safeTo = this.escapeHtml(to);
+        return `
+          <div style="width:100%;background:${palette.bg};padding:32px 14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:${palette.ink};">
+            <div style="max-width:720px;margin:0 auto;background:${palette.paper};border:1px solid ${palette.border};border-radius:14px;padding:28px 32px;box-shadow:0 3px 14px rgba(0,0,0,0.08);">
+              <div style="color:${palette.orange};font-weight:800;font-size:18px;margin-bottom:6px;">PenPal Desk</div>
+              <div style="color:${palette.muted};font-size:13px;margin-bottom:18px;">Letter delivered via Gmail API</div>
+              <h1 style="margin:0 0 12px;font-size:24px;color:${palette.ink};">${safeSubject}</h1>
+              <p style="margin:0 0 16px;color:${palette.muted};">To: ${safeTo}</p>
+              <div style="background:white;border:1px solid ${palette.border};border-radius:10px;padding:18px;line-height:1.7;color:${palette.ink};">
+                ${safeMessage}
+              </div>
+              <p style="margin:18px 0 0;color:${palette.muted};font-size:13px;">Sent from your PenPal Desk using Gmail.</p>
+            </div>
+          </div>
+        `;
+      },
+      buildPostcardHtml({ to, subject, message, image }) {
+        const safeMessage = this.escapeHtml(message).replace(/\n/g, '<br>');
+        const safeSubject = this.escapeHtml(subject);
+        const safeTo = this.escapeHtml(to);
+        const imageBlock = image
+          ? `<img src="${image}" style="width:100%;height:240px;border-radius:10px;object-fit:cover;border:1px solid ${palette.border};margin-bottom:16px;">`
+          : `<div style="width:100%;height:240px;border-radius:10px;border:1px dashed ${palette.border};color:${palette.muted};display:flex;align-items:center;justify-content:center;margin-bottom:16px;background:#f4eee7;">No photo attached</div>`;
+        return `
+          <div style="width:100%;background:${palette.bg};padding:32px 14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:${palette.ink};">
+            <div style="max-width:720px;margin:0 auto;background:${palette.paper};border:1px solid ${palette.border};border-radius:14px;padding:24px 28px;box-shadow:0 3px 14px rgba(0,0,0,0.08);">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <div style="color:${palette.orange};font-weight:800;font-size:18px;">PenPal Postcard</div>
+                <div style="color:${palette.muted};font-size:13px;">To: ${safeTo}</div>
+              </div>
+              ${imageBlock}
+              <h2 style="margin:0 0 10px;font-size:20px;">${safeSubject}</h2>
+              <div style="background:white;border:1px solid ${palette.border};border-radius:10px;padding:16px;line-height:1.6;color:${palette.ink};">
+                ${safeMessage}
+              </div>
+              <p style="margin:16px 0 0;color:${palette.muted};font-size:13px;">Sent via Gmail with your attached postcard.</p>
+            </div>
+          </div>
+        `;
+      },
+      buildRawMessage({ to, subject, html }) {
+        const encodedSubject = this.base64Encode(subject || '');
+        const mime = [
+          'From: me',
+          `To: ${to}`,
+          'Content-Type: text/html; charset=utf-8',
+          'MIME-Version: 1.0',
+          `Subject: =?utf-8?B?${encodedSubject}?=`,
+          '',
+          html,
+        ].join('\n');
+        return this.base64UrlEncode(mime);
+      },
+      async sendEmail({ to, subject, html }) {
+        if (!this.accessToken) throw new Error('Authorize Gmail first');
+        const raw = this.buildRawMessage({ to, subject, html });
+        const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.accessToken}`,
+          },
+          body: JSON.stringify({ raw }),
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.error?.message || 'Failed to send email');
+        }
+      },
+      setAuthState(token) {
+        this.accessToken = token || null;
+      },
+      initGoogleAuth() {
+        const statusEls = [this.statusLetter, this.statusPostcard];
+        if (!window.google || !google.accounts || !google.accounts.oauth2) {
+          statusEls.forEach((el) => { el.text = 'Google auth not loaded. Check your network.'; el.isError = true; });
+          return;
+        }
+        if (!GOOGLE_CLIENT_ID) {
+          statusEls.forEach((el) => { el.text = 'Set GOOGLE_CLIENT_ID in index.html to your OAuth client ID.'; el.isError = true; });
+        }
+        this.tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID,
+          scope: GMAIL_SCOPE,
+          callback: (resp) => {
+            if (resp && resp.access_token) {
+              this.setAuthState(resp.access_token);
+              statusEls.forEach((el) => { el.text = 'Ready to send via Gmail.'; el.isError = false; });
+            } else {
+              statusEls.forEach((el) => { el.text = 'Authorization failed.'; el.isError = true; });
+            }
+          },
+        });
+      },
+      authorize() {
+        const statusEls = [this.statusLetter, this.statusPostcard];
+        if (!GOOGLE_CLIENT_ID) {
+          statusEls.forEach((el) => { el.text = 'Set GOOGLE_CLIENT_ID in index.html to your OAuth client ID.'; el.isError = true; });
+          return;
+        }
+        if (!this.tokenClient) {
+          this.initGoogleAuth();
+        }
+        if (!this.tokenClient) return;
+        this.tokenClient.requestAccessToken({ prompt: this.accessToken ? '' : 'consent' });
+      },
+      async handleSend(mode) {
+        const statusObj = mode === 'letter' ? this.statusLetter : this.statusPostcard;
+        statusObj.text = '';
+        statusObj.isError = false;
+        this.sending = true;
+        try {
+          let payload;
+          if (mode === 'letter') {
+            const { to, subject, message } = this.letter;
+            if (!to || !message) throw new Error('Please fill in the recipient and your message.');
+            payload = {
+              to: to.trim(),
+              subject: (subject || 'A letter for you').trim(),
+              html: this.buildLetterHtml({ to, subject, message }),
+            };
+          } else {
+            const { to, subject, message, image } = this.postcard;
+            if (!to || !message) throw new Error('Please fill in the recipient and your message.');
+            payload = {
+              to: to.trim(),
+              subject: (subject || 'A postcard for you').trim(),
+              html: this.buildPostcardHtml({ to, subject, message, image }),
+            };
+          }
+          await this.sendEmail(payload);
+          statusObj.text = 'Sent via Gmail ✨';
+          statusObj.isError = false;
+        } catch (err) {
+          statusObj.text = err.message;
+          statusObj.isError = true;
+        } finally {
+          this.sending = false;
+        }
+      },
+    },
+    mounted() {
+      this.setAuthState(null);
+      setTimeout(() => this.initGoogleAuth(), 300);
+    },
+  }).mount('#app');
+</script>
+
+</body>
+</html>
