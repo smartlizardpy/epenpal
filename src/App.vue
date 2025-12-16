@@ -21,9 +21,12 @@ const sending = ref(false)
 
 const letter = reactive({ to: '', subject: '', message: '' })
 const postcard = reactive({ to: '', subject: '', message: '', image: '' })
+const contacts = ref([])
+const contactForm = reactive({ name: '', email: '' })
 
 const statusLetter = reactive({ text: '', isError: false })
 const statusPostcard = reactive({ text: '', isError: false })
+const statusContacts = reactive({ text: '', isError: false })
 
 const authLabel = computed(() => (accessToken.value ? 'Authorized for Gmail send' : 'Not authorized'))
 
@@ -340,6 +343,21 @@ function loadPersistedAuth() {
   }
 }
 
+function loadContacts() {
+  const raw = localStorage.getItem('penpal_contacts')
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function saveContacts(list) {
+  localStorage.setItem('penpal_contacts', JSON.stringify(list))
+}
+
 function isTokenValid() {
   return accessToken.value && tokenExpiry.value && Date.now() < tokenExpiry.value
 }
@@ -443,6 +461,40 @@ async function handleSend(type) {
   }
 }
 
+function addContact() {
+  statusContacts.text = ''
+  statusContacts.isError = false
+  const name = contactForm.name.trim()
+  const email = contactForm.email.trim()
+  if (!email) {
+    statusContacts.text = 'Email is required.'
+    statusContacts.isError = true
+    return
+  }
+  if (!/.+@.+\..+/.test(email)) {
+    statusContacts.text = 'Enter a valid email.'
+    statusContacts.isError = true
+    return
+  }
+  contacts.value = [...contacts.value, { name: name || 'Contact', email }]
+  saveContacts(contacts.value)
+  contactForm.name = ''
+  contactForm.email = ''
+  statusContacts.text = 'Saved contact.'
+}
+
+function useContact(contact, target) {
+  if (target === 'letter') {
+    letter.to = contact.email
+    statusLetter.text = 'Recipient filled from contacts.'
+    statusLetter.isError = false
+  } else {
+    postcard.to = contact.email
+    statusPostcard.text = 'Recipient filled from contacts.'
+    statusPostcard.isError = false
+  }
+}
+
 onMounted(() => {
   const saved = loadPersistedAuth()
   if (saved && saved.token && saved.expiresAt && Date.now() < saved.expiresAt) {
@@ -450,6 +502,7 @@ onMounted(() => {
     statusLetter.text = 'Using saved Gmail authorization.'
     statusPostcard.text = 'Using saved Gmail authorization.'
   }
+  contacts.value = loadContacts()
   setTimeout(() => initGoogleAuth(), 300)
 })
 </script>
@@ -459,6 +512,31 @@ onMounted(() => {
     <div class="auth-row">
       <div class="auth-pill">{{ authLabel }}</div>
       <button class="auth-btn" type="button" @click="authorize">Authorize Gmail</button>
+    </div>
+
+    <div class="paper contacts show">
+      <div class="header">Contacts</div>
+      <label class="label" for="contactName">Name</label>
+      <input id="contactName" v-model="contactForm.name" type="text" placeholder="Friend’s name" />
+      <label class="label" style="margin-top: 16px" for="contactEmail">Email</label>
+      <input id="contactEmail" v-model="contactForm.email" type="email" placeholder="friend@example.com" />
+      <div class="status" :class="{ error: statusContacts.isError }">{{ statusContacts.text }}</div>
+      <button class="send-btn small" type="button" @click="addContact">Save Contact</button>
+      <div style="clear: both"></div>
+
+      <div v-if="contacts.length" class="contacts-list">
+        <div class="contact" v-for="(c, idx) in contacts" :key="idx">
+          <div>
+            <div class="contact-name">{{ c.name || 'Contact' }}</div>
+            <div class="contact-email">{{ c.email }}</div>
+          </div>
+          <div class="contact-actions">
+            <button class="mini-btn" type="button" @click="useContact(c, 'letter')">Fill Letter</button>
+            <button class="mini-btn" type="button" @click="useContact(c, 'postcard')">Fill Postcard</button>
+          </div>
+        </div>
+      </div>
+      <div v-else class="hint" style="margin-top: 8px;">Save contacts to fill recipients quickly.</div>
     </div>
 
     <div class="switcher">
@@ -650,6 +728,10 @@ textarea {
   opacity: 0.6;
   cursor: not-allowed;
 }
+.send-btn.small {
+  padding: 10px 18px;
+  font-size: 15px;
+}
 
 .photo-block {
   width: 100%;
@@ -696,6 +778,52 @@ textarea {
   color: var(--muted);
   font-size: 13px;
   margin-top: 12px;
+}
+
+.contacts.show {
+  margin-bottom: 18px;
+}
+.contacts-list {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+.contact {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.contact:last-child {
+  border-bottom: none;
+}
+.contact-name {
+  font-weight: 700;
+  color: var(--ink);
+}
+.contact-email {
+  color: var(--muted);
+  font-size: 14px;
+}
+.contact-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.mini-btn {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+.mini-btn:hover {
+  border-color: var(--orange);
 }
 
 @media (max-width: 640px) {
